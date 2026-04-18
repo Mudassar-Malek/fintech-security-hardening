@@ -28,11 +28,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history — secrets in old commits are still leaked
-      - name: Gitleaks scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0   # full history — secrets deleted in later commits are still exposed
+
+      - name: Install gitleaks
+        run: |
+          VERSION="8.24.3"
+          curl -sL "https://github.com/zricethezav/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /tmp
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+
+      # On push: scan the full working directory (avoids commit-range ambiguity on new repos)
+      # On pull_request: scan only commits in the PR diff
+      - name: Gitleaks scan (push — full repo)
+        if: github.event_name == 'push'
+        run: gitleaks detect --source . --redact --exit-code 1 -v
+
+      - name: Gitleaks scan (pull_request — commit range)
+        if: github.event_name == 'pull_request'
+        run: |
+          gitleaks detect --source . --redact --exit-code 1 -v \
+            --log-opts "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
 
   sast:
     name: SAST (Semgrep)
