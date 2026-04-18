@@ -1,0 +1,134 @@
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so gitleaks can scan all commits on the PR
+
+      - name: Gitleaks — scan for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/python
+            p/docker
+            p/kubernetes
+            p/owasp-top-ten
+          generateSarif: true
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+
+  container-scan:
+    name: Container Vulnerability Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image for scanning
+        run: docker build -t scan-target:${{ github.sha }} .
+        continue-on-error: true
+
+      - name: Trivy — filesystem scan (no build required)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: HIGH,CRITICAL
+          exit-code: 1
+
+      - name: Upload Trivy FS results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-fs.sarif
+
+  iac-scan:
+    name: IaC Security Scan (Checkov)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: terraform,kubernetes,dockerfile,github_actions
+          soft_fail: false
+          output_format: sarif
+          output_file_path: checkov.sarif
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov.sarif
+
+  opa-policy:
+    name: OPA Policy Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OPA
+        run: |
+          curl -L -o opa https://openpolicyagent.org/downloads/v0.62.1/opa_linux_amd64_static
+          chmod +x opa && sudo mv opa /usr/local/bin/
+
+      - name: Validate Kubernetes manifests against OPA policies
+        run: |
+          find . -name "*.yaml" -path "*/apps/*" | while read manifest; do
+            echo "Checking: $manifest"
+            opa eval \
+              --data policies/opa/k8s-security.rego \
+              --input "$manifest" \
+              --format pretty \
+              "data.kubernetes.security.deny" | grep -q '\[\]' || {
+              echo "POLICY VIOLATION in $manifest"
+              exit 1
+            }
+          done
+
+  summary:
+    name: Security Gate
+    runs-on: ubuntu-latest
+    needs: [secret-scan, sast, container-scan, iac-scan, opa-policy]
+    if: always()
+    steps:
+      - name: Check all security gates passed
+        run: |
+          if [ "${{ needs.secret-scan.result }}" != "success" ] || \
+             [ "${{ needs.sast.result }}" != "success" ] || \
+             [ "${{ needs.container-scan.result }}" != "success" ] || \
+             [ "${{ needs.iac-scan.result }}" != "success" ] || \
+             [ "${{ needs.opa-policy.result }}" != "success" ]; then
+            echo "One or more security gates failed. Blocking merge."
+            exit 1
+          fi
+          echo "All security gates passed."

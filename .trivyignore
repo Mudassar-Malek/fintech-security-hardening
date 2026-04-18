@@ -1,0 +1,5 @@
+# Document every exception with: CVE ID, reason, expiry date, and approver.
+# Undocumented ignores will be removed in CI.
+
+# Example:
+# CVE-2023-12345  # reason: no fix available, mitigated by WAF rule. Expires: 2026-07-01. Approved by: security-team

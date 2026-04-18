@@ -1,0 +1,21 @@
+# Trivy configuration for fintech workloads
+# Fail on HIGH and CRITICAL vulnerabilities in production images
+
+severity:
+  - HIGH
+  - CRITICAL
+
+exit-code: 1
+
+# Ignore unfixed vulnerabilities (can't patch what has no fix yet)
+ignore-unfixed: true
+
+# Skip dev dependencies in filesystem scans
+skip-dirs:
+  - node_modules
+  - .venv
+  - venv
+  - .pytest_cache
+
+# VEX / ignore file — document exceptions with justification
+ignorefile: .trivyignore
