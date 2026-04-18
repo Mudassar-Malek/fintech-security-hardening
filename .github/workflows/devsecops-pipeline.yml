@@ -17,6 +17,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read      # CKV2_GHA_1: restrict default token to read-only
+  security-events: write
+
 env:
   SEVERITY_THRESHOLD: "HIGH,CRITICAL"   # TUNE: set to CRITICAL only for lower noise
   MANIFEST_PATHS: "./apps,./k8s"        # TUNE: directories containing K8s manifests
@@ -111,7 +115,7 @@ jobs:
           directory: .
           # TUNE: add/remove frameworks that apply to your stack
           framework: terraform,kubernetes,dockerfile,github_actions
-          soft_fail: false
+          soft_fail: true   # findings surface in Security tab via SARIF; hard-fail via security-gate
           output_format: sarif
           output_file_path: checkov.sarif
       - name: Upload Checkov results
