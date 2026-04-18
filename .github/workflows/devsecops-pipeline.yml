@@ -139,13 +139,27 @@ jobs:
     steps:
       - name: Evaluate gate
         run: |
-          results="${{ needs.secret-scan.result }} ${{ needs.sast.result }} \
-                   ${{ needs.container-scan.result }} ${{ needs.iac-scan.result }} \
-                   ${{ needs.opa-policy.result }}"
-          for r in $results; do
-            if [ "$r" != "success" ]; then
-              echo "Security gate FAILED. One or more checks did not pass."
-              exit 1
+          declare -A results
+          results[secret-scan]="${{ needs.secret-scan.result }}"
+          results[sast]="${{ needs.sast.result }}"
+          results[container-scan]="${{ needs.container-scan.result }}"
+          results[iac-scan]="${{ needs.iac-scan.result }}"
+          results[opa-policy]="${{ needs.opa-policy.result }}"
+
+          failed=0
+          for job in "${!results[@]}"; do
+            if [ "${results[$job]}" != "success" ]; then
+              echo "FAILED: $job → ${results[$job]}"
+              failed=1
+            else
+              echo "PASSED: $job"
             fi
           done
+
+          if [ "$failed" -eq 1 ]; then
+            echo ""
+            echo "Security gate FAILED. Fix the jobs above before merging."
+            exit 1
+          fi
+          echo ""
           echo "All security gates passed."
