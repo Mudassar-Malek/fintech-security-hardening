@@ -1,6 +1,6 @@
 # fintech-security-hardening
 
-> DevSecOps pipeline for fintech Kubernetes workloads — secret detection, SAST, container scanning, IaC security, and OPA policy enforcement as GitHub Actions security gates.
+> DevSecOps pipeline with 5 security gates — secret detection, SAST, container scanning, IaC security, and OPA policy enforcement for Kubernetes workloads.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
