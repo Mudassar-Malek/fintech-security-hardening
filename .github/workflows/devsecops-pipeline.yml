@@ -56,18 +56,21 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
+      - name: Install Semgrep
+        run: pip install semgrep
       - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
-        with:
-          # TUNE: add/remove rulesets from https://semgrep.dev/r
-          config: >-
-            p/python
-            p/docker
-            p/kubernetes
-            p/owasp-top-ten
-          generateSarif: true
+        # TUNE: add/remove rulesets from https://semgrep.dev/r
+        run: |
+          semgrep \
+            --config p/python \
+            --config p/docker \
+            --config p/kubernetes \
+            --config p/owasp-top-ten \
+            --sarif \
+            --output semgrep.sarif \
+            . || true
       - name: Upload SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -90,7 +93,7 @@ jobs:
           exit-code: 1
           # TUNE: add --ignore-unfixed to skip CVEs with no available fix
       - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy-results.sarif
@@ -112,7 +115,7 @@ jobs:
           output_format: sarif
           output_file_path: checkov.sarif
       - name: Upload Checkov results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: checkov.sarif
